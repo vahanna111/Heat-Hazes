@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive Heat Haze Demo (Desert + Asphalt)</title>
+  <style>
+    html, body { margin:0; height:100%; overflow:hidden; }
+    #canvas { display:block; }
+    #instructions {
+      position:absolute; top:10px; left:10px;
+      background:rgba(255,255,255,0.8); padding:8px;
+      font-family:sans-serif; font-size:14px; border-radius:4px;
+    }
+  </style>
+</head>
+<body>
+  <div id="instructions">
+    • Click &amp; hold to “heat” the asphalt<br>
+    • Move mouse to aim the heat‑gun tool<br>
+    • Release to let haze fade
+  </div>
+  <canvas id="canvas"></canvas>
+  <script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    let W, H;
+
+    function resize() {
+      W = canvas.width = window.innerWidth;
+      H = canvas.height = window.innerHeight;
+      drawBackground();
+    }
+    window.addEventListener('resize', resize);
+
+    // offscreen bg
+    const bg = document.createElement('canvas');
+    const bgCtx = bg.getContext('2d');
+    function drawBackground() {
+      bg.width = W; bg.height = H;
+
+      // 1) Sky gradient
+      const sky = bgCtx.createLinearGradient(0, 0, 0, H * 0.5);
+      sky.addColorStop(0, '#87CEEB');   // sky blue
+      sky.addColorStop(1, '#F0E68C');   // dusty horizon
+      bgCtx.fillStyle = sky;
+      bgCtx.fillRect(0, 0, W, H * 0.5);
+
+      // 2) Sand dunes (simple ellipses)
+      bgCtx.fillStyle = '#EDC9AF';
+      bgCtx.beginPath();
+      bgCtx.ellipse(W * 0.3, H * 0.55, W * 0.5, H * 0.2, 0, 0, 2 * Math.PI);
+      bgCtx.fill();
+      bgCtx.beginPath();
+      bgCtx.ellipse(W * 0.8, H * 0.6, W * 0.6, H * 0.25, 0, 0, 2 * Math.PI);
+      bgCtx.fill();
+
+      // 3) Asphalt (bottom 30%)
+      bgCtx.fillStyle = '#666';
+      bgCtx.fillRect(0, H * 0.7, W, H * 0.3);
+      // asphalt noise
+      for (let i = 0; i < 8000; i++) {
+        bgCtx.fillStyle = 'rgba(0,0,0,0.05)';
+        const x = Math.random() * W, y = H * 0.7 + Math.random() * H * 0.3;
+        bgCtx.fillRect(x, y, 1, 1);
+      }
+
+      // 4) Water puddle (on the asphalt)
+      const cx = W * 0.6, cy = H * 0.85;
+      const rx = W * 0.12, ry = H * 0.04;
+      const grd = bgCtx.createRadialGradient(cx, cy, ry * 0.2, cx, cy, ry);
+      grd.addColorStop(0, 'rgba(30,144,255,0.6)');
+      grd.addColorStop(1, 'rgba(30,144,255,0)');
+      bgCtx.beginPath();
+      bgCtx.ellipse(cx, cy, rx, ry, 0, 0, 2 * Math.PI);
+      bgCtx.fillStyle = '#4ba';
+      bgCtx.fill();
+      bgCtx.fillStyle = grd;
+      bgCtx.fill();
+    }
+
+    // heater state
+    let heating = false, heatIntensity = 0;
+    let mx = 0, my = 0;
+
+    canvas.addEventListener('mousedown', e => { heating = true; mx = e.clientX; my = e.clientY; });
+    canvas.addEventListener('mouseup',   e => { heating = false; });
+    canvas.addEventListener('mousemove', e => { mx = e.clientX; my = e.clientY; });
+
+    let last = performance.now();
+    function loop(now) {
+      const dt = (now - last) / 1000; last = now;
+      // update heat level
+      if (heating) heatIntensity = Math.min(1, heatIntensity + dt * 0.5);
+      else          heatIntensity = Math.max(0, heatIntensity - dt * 0.2);
+
+      // draw background
+      ctx.clearRect(0, 0, W, H);
+      ctx.drawImage(bg, 0, 0);
+
+      // draw heat haze region
+      if (heatIntensity > 0) {
+        const r = 120;
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(mx, my, r, 0, 2 * Math.PI);
+        ctx.clip();
+
+        ctx.globalAlpha = 0.15 * heatIntensity;
+        for (let i = 0; i < 8; i++) {
+          const dx = (Math.random() * 2 - 1) * heatIntensity * 15;
+          const dy = (Math.random() * 2 - 1) * heatIntensity * 15;
+          ctx.drawImage(bg,
+            mx - r + dx, my - r + dy, r * 2, r * 2,
+            mx - r,       my - r,       r * 2, r * 2);
+        }
+        ctx.restore();
+        ctx.globalAlpha = 1;
+      }
+
+      // draw the heat‑gun tool
+      // barrel
+      ctx.fillStyle = '#444';
+      ctx.fillRect(mx - 15, my - 5, 30, 10);
+      // handle
+      ctx.fillRect(mx - 5, my - 25, 10, 20);
+      // flame tip when heating
+      if (heating) {
+        ctx.fillStyle = 'orange';
+        ctx.beginPath();
+        ctx.moveTo(mx + 15, my - 3);
+        ctx.quadraticCurveTo(mx + 25, my, mx + 15, my + 3);
+        ctx.fill();
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    resize();
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
